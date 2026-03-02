@@ -1,0 +1,17 @@
+# Task: Find Seedance 2.0 information in Videogen API docs
+
+## Plan
+1. Open https://videogenapi.com/docs/ - [ ] (Failed twice)
+2. Search for "Seedance" or "Seedance 2.0" - [ ]
+3. Extract endpoint, headers, and request body parameters - [ ]
+4. Report findings - [ ]
+
+## Progress
+- Attempt 1: Action timed out, browser connection reset.
+- Attempt 2: Same error.
+- Attempt to open Google: Same error.
+
+## Findings
+- Seedance 2.0 Endpoint: 
+- Required Headers:
+- Request Body Parameters:

@@ -1,0 +1,5 @@
+node_modules/
+temp_video_*.mp4
+*.log
+.DS_Store
+package-lock.json

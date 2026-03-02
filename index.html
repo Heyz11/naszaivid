@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seedance 2.0 - Video Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <main class="app-container">
+        <header>
+            <div class="logo">
+                <span class="gradient-text">Seedance 2.0</span>
+                <span class="badge">Advanced AI</span>
+            </div>
+            <div class="api-key-container">
+                <input type="password" id="apiKey" placeholder="Enter API Key (lt_...)" class="input-glow">
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <section class="generator-card">
+                <div class="input-group">
+                    <label for="prompt">Prompt</label>
+                    <textarea id="prompt" placeholder="A futuristic city with flying cars at sunset..."
+                        rows="4"></textarea>
+                </div>
+
+                <div class="options-grid">
+                    <div class="input-group">
+                        <label for="model">AI Model</label>
+                        <select id="model">
+                            <optgroup label="Free Models">
+                                <option value="seedance-2" selected>Seedance 2.0 (1080p)</option>
+                                <option value="sora-2">Sora 2 (1080p)</option>
+                                <option value="kling-3">Kling 3 (1080p)</option>
+                                <option value="higgsfield_v1">Higgsfield V1 (1080p)</option>
+                                <option value="wan-25">Wan 2.5 (1080p)</option>
+                                <option value="ltxv-2">LTV Video 2 (4K)</option>
+                            </optgroup>
+                            <optgroup label="Premium Models">
+                                <option value="veo_3">Veo 3 Fast (1080p)</option>
+                                <option value="veo-31">Veo 3.1 Fast (1080p)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="aspectRatio">Aspect Ratio</label>
+                        <select id="aspectRatio">
+                            <option value="auto" selected>✨ AUTO (Follow Image)</option>
+                            <option value="16:9">16:9 (Widescreen)</option>
+                            <option value="4:3">4:3 (Standard)</option>
+                            <option value="1:1">1:1 (Square)</option>
+                            <option value="9:21">9:21 (Ultra Tall)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="duration">Duration</label>
+                        <select id="duration">
+                            <option value="5">5s</option>
+                            <option value="10" selected>10s</option>
+                            <option value="15">15s</option>
+                        </select>
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Image Input (Optional)</label>
+                        <div class="image-mode-tabs">
+                            <button type="button" class="tab-btn active" data-mode="upload">
+                                <span class="tab-icon">📁</span> Local File
+                            </button>
+                            <button type="button" class="tab-btn" data-mode="url">
+                                <span class="tab-icon">🔗</span> Public URL
+                            </button>
+                        </div>
+
+                        <div class="tab-content" id="uploadTab">
+                            <div class="drop-zone" id="dropZone">
+                                <span class="drop-zone-text">Click or Drag & Drop Image Here</span>
+                                <input type="file" id="imageUpload" accept="image/*" class="drop-zone-input">
+                            </div>
+                        </div>
+
+                        <div class="tab-content hidden" id="urlTab">
+                            <div class="url-input-container">
+                                <input type="text" id="imageUrl" placeholder="Paste image URL (png, jpg, webp)..."
+                                    class="premium-input">
+                            </div>
+                        </div>
+
+                        <div id="imagePreview" class="image-preview-container hidden">
+                            <div class="preview-card">
+                                <img id="previewImg" src="" alt="Preview">
+                                <div class="preview-overlay">
+                                    <span class="preview-info">Scale: Auto</span>
+                                    <button id="clearImg" class="remove-btn">Remove Image</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="generateBtn" class="generate-button">
+                    <span class="btn-content">Generate Video</span>
+                    <div class="loader-inner hidden"></div>
+                </button>
+            </section>
+
+            <aside class="monitor-panel">
+                <div class="panel-header">
+                    <h3>Live System Monitor</h3>
+                    <div class="pulse-indicator"></div>
+                </div>
+                <div id="logsContainer" class="logs-monitor">
+                    <div class="log-entry">System Standby... Waiting for input.</div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <span class="stat-label">TIME</span>
+                        <span id="uiTimer" class="stat-value">0s</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">STATUS</span>
+                        <span id="uiStatus" class="stat-value">IDLE</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">PROGRESS</span>
+                        <span id="uiProgress" class="stat-value">0%</span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <section id="resultsSection" class="results-container hidden">
+            <div class="status-card">
+                <div id="statusId" class="gen-id">Generation ID: --</div>
+                <div id="statusText" class="status-pending">Waiting...</div>
+                <div class="progress-bar-container">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+            </div>
+
+            <div id="resultsLogs" class="logs-monitor">
+                <!-- Status details will appear here -->
+            </div>
+
+            <div id="videoContainer" class="video-preview hidden">
+                <video id="outputVideo" controls></video>
+                <a id="downloadLink" href="#" target="_blank" class="download-btn">Download Video</a>
+            </div>
+        </section>
+
+        <footer>
+            <p>Powered by VideoGenAPI & Seedance 2.0</p>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
