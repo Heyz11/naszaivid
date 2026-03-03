@@ -270,13 +270,25 @@ bot.command('updatebot', (ctx) => {
 bot.action('admin_menu', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return ctx.answerCbQuery('Akses Ditolak');
 
-    ctx.editMessageText('🎮 **DASHBOARD ADMIN**\n\nSelamat datang Boss! Pilih tindakan anda di bawah:', {
+    ctx.editMessageText('🎮 **DASHBOARD ADMIN**\n\nSelamat datang Boss! Pilih kategori di bawah:', {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-            [Markup.button.callback('📋 List VIP', 'admin_list'), Markup.button.callback('➕ Quick Add VIP', 'admin_add_selector')],
+            [Markup.button.callback('🎫 Pengurusan VIP', 'admin_vip_menu')],
             [Markup.button.callback('🔄 Update Bot (GitHub)', 'admin_update')],
             [Markup.button.callback('🖥️ Update VPS System', 'admin_vps_update')],
-            [Markup.button.callback('⬅️ Kembali ke Menu', 'back_start')]
+            [Markup.button.callback('⬅️ Kembali ke Menu Utama', 'back_start')]
+        ])
+    });
+});
+
+bot.action('admin_vip_menu', (ctx) => {
+    ctx.editMessageText('🎫 **PENGURUSAN VIP**\n\nPilih tindakan yang anda mahu:', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('📋 Senarai VIP', 'admin_list')],
+            [Markup.button.callback('➕ Tambah VIP (Quick)', 'admin_add_selector')],
+            [Markup.button.callback('❌ Padam VIP', 'admin_del_selector')],
+            [Markup.button.callback('⬅️ Kembali ke Dashboard', 'admin_menu')]
         ])
     });
 });
@@ -332,7 +344,7 @@ bot.action('admin_list', (ctx) => {
 
     ctx.editMessageText(msg, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_menu')]])
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu VIP', 'admin_vip_menu')]])
     });
 });
 
@@ -370,11 +382,42 @@ bot.action('admin_add_selector', (ctx) => {
     if (users.length === 0) return ctx.answerCbQuery('Tiada user dalam database.');
 
     const buttons = users.map(([uname, uid]) => [Markup.button.callback(`Tambah ${uname}`, `quickadd:${uid}`)]);
-    buttons.push([Markup.button.callback('⬅️ Kembali', 'admin_menu')]);
+    buttons.push([Markup.button.callback('⬅️ Kembali ke Menu VIP', 'admin_vip_menu')]);
 
     ctx.editMessageText('🆕 **PILIH USER UNTUK VIP (30 HARI)**\n\nBerikut adalah senarai user terbaru yang pernah masuk bot:', {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(buttons)
+    });
+});
+
+bot.action('admin_del_selector', (ctx) => {
+    const entries = Object.entries(VIP_DATA);
+    if (entries.length === 0) return ctx.answerCbQuery('Tiada VIP untuk dipadam.');
+
+    const buttons = entries.map(([uid, expiry]) => {
+        const targetId = parseInt(uid);
+        const usernameEntry = Object.entries(USER_MAP).find(([uname, id]) => id === targetId);
+        const name = usernameEntry ? usernameEntry[0] : uid;
+        return [Markup.button.callback(`❌ Padam ${name}`, `quickdel:${uid}`)];
+    });
+
+    buttons.push([Markup.button.callback('⬅️ Kembali ke Menu VIP', 'admin_vip_menu')]);
+
+    ctx.editMessageText('❌ **PILIH VIP UNTUK DIPADAM**\n\nKlik pada nama untuk buang akses mereka:', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons)
+    });
+});
+
+bot.action(/^quickdel:(.+)$/, (ctx) => {
+    const targetId = parseInt(ctx.match[1]);
+    delete VIP_DATA[targetId];
+    saveVips();
+
+    ctx.answerCbQuery('✅ VIP telah dipadam!');
+    ctx.editMessageText('✅ **BERJAYA!**\n\nAkses VIP untuk user tersebut telah dibatalkan.', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_vip_menu')]])
     });
 });
 
@@ -392,7 +435,7 @@ bot.action(/^quickadd:(.+)$/, (ctx) => {
     ctx.answerCbQuery(`✅ ${name} diaktifkan!`);
     ctx.editMessageText(`✅ **BERJAYA!**\n\nUser **${name}** telah diaktifkan untuk 30 hari.`, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_menu')]])
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_vip_menu')]])
     });
 
     // Hantar notifikasi ke user
