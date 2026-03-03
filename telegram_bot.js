@@ -133,16 +133,33 @@ async function uploadToCloud(telegramUrl) {
 
 bot.start((ctx) => {
     const userId = ctx.from.id;
-    const welcomeMsg = `🎬 **SELAMAT DATANG KE SEEDANCE VIDEO AI** 🎬\n\n` +
-        `Alami kehebatan penjanaan video AI terus dari Telegram anda! 🚀\n\n` +
-        `🌟 **Kenapa guna bot ini?**\n` +
-        `• Janakan video dari **Teks** atau **Gambar**\n` +
-        `• Model AI Terkini: **Sora 2, Seedance, Kling & Wan**\n` +
-        `• Pilihan Ratio: **Landscape (16:9)** & **Portrait (9:16)**\n\n` +
-        `🆔 **ID Anda:** \`${userId}\`\n\n` +
-        `✍️ **Cara Guna:**\n` +
+    // --- SEMAK STATUS USER ---
+    let userTier = "👤 **Free User**";
+    let expiryInfo = "";
+
+    if (userId === ADMIN_ID) {
+        userTier = "⚡ **System Owner**";
+    } else if (VIP_DATA[userId]) {
+        const remainingDays = Math.ceil((VIP_DATA[userId] - Date.now()) / (24 * 60 * 60 * 1000));
+        if (remainingDays > 0) {
+            userTier = "🌟 **VIP Subscriber**";
+            expiryInfo = `\n📅 **Baki Langganan:** ${remainingDays} hari`;
+        }
+    }
+
+    const welcomeMsg = `👋 **Selamat Datang ke VideoGen AI!**\n\n` +
+        `----------------------------\n` +
+        `📊 **STATUS AKAUN ANDA:**\n` +
+        `🔹 **Tier:** ${userTier}${expiryInfo}\n` +
+        `----------------------------\n\n` +
+        `Tukarkan teks atau imej menjadi video yang memukau dalam beberapa saat.\n\n` +
+        `🚀 **MODEL AI TERSEDIA:**\n` +
+        `• **Sora 2** (Realistik & Sinematik)\n` +
+        `• **Kling AI** (Gerakan Fizik Mantap)\n` +
+        `• **Wan AI** (Artistik & Unik)\n` +
+        `• **Seedance** (Kreatif & Cepat)\n\n` +
         `Sila taip **Prompt** anda di bawah (Contoh: "A futuristic city in the clouds").\n\n` +
-        `📢 _Nota: Sila hubungi Admin untuk pengaktifan akaun jika anda pengguna baru._`;
+        `📢 _Nota: Sila hubungi Admin untuk langganan VIP jika baki hari anda tamat._`;
 
     const buttons = [
         [Markup.button.url('💬 Hubungi Admin', 'tg://user?id=7583026606')]
@@ -310,21 +327,21 @@ bot.on('document', async (ctx) => {
             // Simpan fail (Overwrite)
             fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
 
-            ctx.reply(`✅ **Fail ${fileName} berjaya dikemaskini!**`, { parse_mode: 'Markdown' });
+            ctx.reply(`✅ **FAIL ${fileName.toUpperCase()} BERJAYA DISIMPAN!**\n\nSistem akan dimulakan semula untuk mengaktifkan perubahan.`, { parse_mode: 'Markdown' });
 
             if (fileName === 'package.json') {
-                ctx.reply('📦 **Menjalankan "npm install" untuk library baru...**', { parse_mode: 'Markdown' });
+                ctx.reply('📦 **Menjalankan "npm install" untuk library baru...**\nSila tunggu sebentar.', { parse_mode: 'Markdown' });
                 exec('npm install', (err) => {
-                    if (err) return ctx.reply(`❌ Ralat npm: ${err.message}`);
-                    ctx.reply('✅ Library siap dipasang! Restarting...');
+                    if (err) return ctx.reply(`❌ **RALAT SISTEM (NPM):**\n\`${err.message}\``);
+                    ctx.reply('✅ **Library siap dipasang!** Menghidupkan bot...');
                     setTimeout(() => exec('pm2 restart video-bot'), 2000);
                 });
             } else {
-                ctx.reply('🔄 **Restarting bot dalam 2 saat...**', { parse_mode: 'Markdown' });
+                ctx.reply('� **Menghidupkan bot dengan feature terbaru...**', { parse_mode: 'Markdown' });
                 setTimeout(() => exec('pm2 restart video-bot'), 2000);
             }
         } catch (err) {
-            ctx.reply(`❌ **Gagal update:** ${err.message}`);
+            ctx.reply(`❌ **PROSES GAGAL:**\n\`${err.message}\``);
         }
     }
 });
@@ -788,9 +805,13 @@ async function checkStatus(ctx, genId) {
     }, 600000);
 }
 
+// Jalankan Bot
 bot.launch().then(() => {
     console.log('--- BOT TELEGRAM SEEDANCE AKTIF ---');
     console.log('Progress bar dihidupkan 🚀');
+    // Notifikasi ke Admin bila bot hidup semula
+    bot.telegram.sendMessage(ADMIN_ID, '🚀 **BOT ONLINE!**\nSistem telah berjaya dihidupkan semula dengan kod terbaru.', { parse_mode: 'Markdown' })
+        .catch(e => log(`Gagal noti admin: ${e.message}`));
 });
 
 // Enable graceful stop
