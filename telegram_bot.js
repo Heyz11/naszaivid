@@ -1,9 +1,12 @@
 const { Telegraf, Markup } = require('telegraf');
+const { exec } = require('child_process'); // Tambah ini untuk jalankan shell command
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
+const util = require('util'); // Tambah ini untuk promisify exec
+const execPromise = util.promisify(exec); // Promisify exec untuk penggunaan async/await
 
 // ==========================================
 // CONFIGURATION - MASUKKAN DATA ANDA DI SINI
@@ -141,11 +144,18 @@ bot.start((ctx) => {
         `Sila taip **Prompt** anda di bawah (Contoh: "A futuristic city in the clouds").\n\n` +
         `📢 _Nota: Sila hubungi Admin untuk pengaktifan akaun jika anda pengguna baru._`;
 
+    const buttons = [
+        [Markup.button.url('💬 Hubungi Admin', 'tg://user?id=7583026606')]
+    ];
+
+    // Jika anda (Admin) yang tekan /start, bagi butang Dashboard
+    if (userId === ADMIN_ID) {
+        buttons.push([Markup.button.callback('⚙️ Dashboard Admin', 'admin_menu')]);
+    }
+
     ctx.reply(welcomeMsg, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-            [Markup.button.url('💬 Hubungi Admin', 'tg://user?id=7583026606')]
-        ])
+        ...Markup.inlineKeyboard(buttons)
     });
 });
 
@@ -226,9 +236,173 @@ bot.command('helpadmin', (ctx) => {
         `   — Semak baki hari pelanggan.\n\n` +
         `3. \`/delvip [ID]\`\n` +
         `   — Buang akses serta-merta.\n\n` +
-        `4. \`/helpadmin\`\n` +
-        `   — Menu ini.`;
+        `4. \`/updatebot\`\n` +
+        `   — Tarik kod terbaru dari GitHub & Restart.\n\n` +
+        `5. \`/helpadmin\`\n` +
+        `   — Menu ini.\n\n` +
+        `💡 **TIPS PRO:**\n` +
+        `Anda boleh terus **hantar fail** \`telegram_bot.js\` ke sini untuk update kod tanpa guna GitHub/Terminal!`;
     ctx.reply(helpMsg, { parse_mode: 'Markdown' });
+});
+
+bot.command('updatebot', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return ctx.reply('Hanya Admin boleh guna.');
+
+    ctx.reply('🔄 **Sedang mengemas kini kod dari GitHub...**', { parse_mode: 'Markdown' });
+
+    // Jalankan git pull
+    exec('git pull', (error, stdout, stderr) => {
+        if (error) {
+            return ctx.reply(`❌ **Gagal Git Pull:**\n\`${error.message}\``, { parse_mode: 'Markdown' });
+        }
+
+        ctx.reply(`✅ **Kod berjaya ditarik!**\n\n\`${stdout}\`\n\n🔄 Bot akan restart dalam 3 saat...`, { parse_mode: 'Markdown' });
+
+        // Tunggu sekejap bagi mesej sampai, baru restart guna PM2
+        setTimeout(() => {
+            exec('pm2 restart video-bot');
+        }, 3000);
+    });
+});
+// --------------------------
+
+// --- DASHBOARD ADMIN (BUTTONS) ---
+bot.action('admin_menu', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return ctx.answerCbQuery('Akses Ditolak');
+
+    ctx.editMessageText('🎮 **DASHBOARD ADMIN**\n\nSelamat datang Boss! Pilih tindakan anda di bawah:', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('📋 List VIP', 'admin_list'), Markup.button.callback('➕ Quick Add VIP', 'admin_add_selector')],
+            [Markup.button.callback('🔄 Update Bot (GitHub)', 'admin_update')],
+            [Markup.button.callback('🖥️ Update VPS System', 'admin_vps_update')],
+            [Markup.button.callback('⬅️ Kembali ke Menu', 'back_start')]
+        ])
+    });
+});
+
+// --- UPDATE VIA FILE (ZAP DEPLOY) ---
+bot.on('document', async (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return;
+
+    const file = ctx.message.document;
+    const fileName = file.file_name;
+
+    if (fileName === 'telegram_bot.js' || fileName === 'package.json') {
+        ctx.reply(`📥 **Menerima fail ${fileName}...**\nSedang mengemas kini bot...`, { parse_mode: 'Markdown' });
+
+        try {
+            const fileLink = await ctx.telegram.getFileLink(file.file_id);
+            const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
+
+            // Simpan fail (Overwrite)
+            fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
+
+            ctx.reply(`✅ **Fail ${fileName} berjaya dikemaskini!**`, { parse_mode: 'Markdown' });
+
+            if (fileName === 'package.json') {
+                ctx.reply('📦 **Menjalankan "npm install" untuk library baru...**', { parse_mode: 'Markdown' });
+                exec('npm install', (err) => {
+                    if (err) return ctx.reply(`❌ Ralat npm: ${err.message}`);
+                    ctx.reply('✅ Library siap dipasang! Restarting...');
+                    setTimeout(() => exec('pm2 restart video-bot'), 2000);
+                });
+            } else {
+                ctx.reply('🔄 **Restarting bot dalam 2 saat...**', { parse_mode: 'Markdown' });
+                setTimeout(() => exec('pm2 restart video-bot'), 2000);
+            }
+        } catch (err) {
+            ctx.reply(`❌ **Gagal update:** ${err.message}`);
+        }
+    }
+});
+
+bot.action('admin_list', (ctx) => {
+    const entries = Object.entries(VIP_DATA);
+    let msg = `📋 **SENARAI VIP AKTIF:**\n\n`;
+    if (entries.length === 0) msg += '_Tiada VIP aktif._';
+
+    entries.forEach(([id, expiry]) => {
+        const targetId = parseInt(id);
+        const usernameEntry = Object.entries(USER_MAP).find(([uname, uid]) => uid === targetId);
+        const displayName = usernameEntry ? `**${usernameEntry[0]}**` : `ID: \`${id}\``;
+        const remainingDays = Math.ceil((expiry - Date.now()) / (24 * 60 * 60 * 1000));
+        msg += `• ${displayName} (Baki: ${remainingDays} hari)\n`;
+    });
+
+    ctx.editMessageText(msg, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_menu')]])
+    });
+});
+
+bot.action('admin_update', (ctx) => {
+    ctx.answerCbQuery('🔄 Memulakan Update Bot...');
+    ctx.reply('🔄 **Sedang tarik kod terbaru dari GitHub...**', { parse_mode: 'Markdown' });
+
+    exec('git pull', (error, stdout) => {
+        if (error) return ctx.reply(`❌ Ralat: ${error.message}`);
+        ctx.reply(`✅ **Kod Bot Berjaya Dikemaskini!**\n\n\`${stdout}\`\n\n🔄 Restarting...`);
+        setTimeout(() => exec('pm2 restart video-bot'), 2000);
+    });
+});
+
+bot.action('admin_vps_update', (ctx) => {
+    if (ctx.from.id !== ADMIN_ID) return ctx.answerCbQuery('Akses Ditolak');
+
+    ctx.answerCbQuery('🖥️ Memulakan Maintenance VPS...');
+    ctx.reply('🖥️ **Sedang mengemas kini sistem Linux (apt update & upgrade)...**\n_Proses ini mungkin ambil masa 1-2 minit._', { parse_mode: 'Markdown' });
+
+    const cmd = 'export DEBIAN_FRONTEND=noninteractive && apt update && apt upgrade -y && apt autoremove -y';
+
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) return ctx.reply(`❌ **Ralat VPS:**\n\`${error.message}\``, { parse_mode: 'Markdown' });
+
+        // Ambil 1000 patah perkataan terakhir supaya mesej tak terlalu panjang
+        const result = stdout.length > 1000 ? stdout.slice(-1000) : stdout;
+
+        ctx.reply(`✅ **Sistem VPS Berjaya Dikemaskini!**\n\n**Log Terakhir:**\n\`\`\`\n${result}\n\`\`\``, { parse_mode: 'Markdown' });
+    });
+});
+
+bot.action('admin_add_selector', (ctx) => {
+    const users = Object.entries(USER_MAP).slice(-10); // Ambil 10 user terbaru
+    if (users.length === 0) return ctx.answerCbQuery('Tiada user dalam database.');
+
+    const buttons = users.map(([uname, uid]) => [Markup.button.callback(`Tambah ${uname}`, `quickadd:${uid}`)]);
+    buttons.push([Markup.button.callback('⬅️ Kembali', 'admin_menu')]);
+
+    ctx.editMessageText('🆕 **PILIH USER UNTUK VIP (30 HARI)**\n\nBerikut adalah senarai user terbaru yang pernah masuk bot:', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons)
+    });
+});
+
+bot.action(/^quickadd:(.+)$/, (ctx) => {
+    const targetId = parseInt(ctx.match[1]);
+    const days = 30;
+    const expiryDate = Date.now() + (days * 24 * 60 * 60 * 1000);
+
+    VIP_DATA[targetId] = expiryDate;
+    saveVips();
+
+    const usernameEntry = Object.entries(USER_MAP).find(([uname, uid]) => uid === targetId);
+    const name = usernameEntry ? usernameEntry[0] : targetId;
+
+    ctx.answerCbQuery(`✅ ${name} diaktifkan!`);
+    ctx.editMessageText(`✅ **BERJAYA!**\n\nUser **${name}** telah diaktifkan untuk 30 hari.`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_menu')]])
+    });
+
+    // Hantar notifikasi ke user
+    ctx.telegram.sendMessage(targetId, `🎉 **AKSES VIP ANDA TELAH AKTIF (30 HARI)**!\n\nSila taip prompt anda untuk mula.`).catch(e => log(`Gagal noti user: ${e.message}`));
+});
+
+bot.action('back_start', (ctx) => {
+    ctx.editMessageText('🎬 Menu Utama Bot Video AI.', {
+        ...Markup.inlineKeyboard([[Markup.button.callback('⚙️ Dashboard Admin', 'admin_menu')]])
+    });
 });
 // --------------------------
 
