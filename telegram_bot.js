@@ -334,37 +334,26 @@ bot.on('document', async (ctx) => {
     const fileName = file.file_name;
 
     if (fileName === 'telegram_bot.js' || fileName === 'package.json') {
-        const msg = await ctx.reply(`📥 Menerima fail: ${fileName}\n\n[░░░░░░░░░░] 0% — Menunggu...`);
+        ctx.reply('Menerima fail ' + fileName + '... Sila tunggu.');
 
         try {
-            // STEP 1: Download
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `📥 **MUAT TURUN FAIL...**\n\n[███░░░░░░░] 30% — Downloading...`, { parse_mode: 'Markdown' });
-
             const fileLink = await ctx.telegram.getFileLink(file.file_id);
             const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
-
-            // STEP 2: Save
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `💾 **MENYIMPAN FAIL KE VPS...**\n\n[███████░░░] 70% — Overwriting...`, { parse_mode: 'Markdown' });
             fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
 
-            // STEP 3: Finalize
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ **KEMASKINI SELESAI!**\n\n[██████████] 100% — Siap!`, { parse_mode: 'Markdown' });
-
             if (fileName === 'package.json') {
-                ctx.reply('📦 **Menjalankan "npm install" untuk library baru...**\nSila tunggu sebentar.', { parse_mode: 'Markdown' });
+                ctx.reply('Fail disimpan. Menjalankan npm install...');
                 exec('npm install', (err) => {
-                    if (err) return ctx.reply(`❌ **RALAT SISTEM (NPM):**\n\`${err.message}\``);
-                    ctx.reply('✅ **Library siap dipasang!** Menghidupkan bot...');
+                    if (err) return ctx.reply('Ralat npm: ' + err.message);
+                    ctx.reply('Library siap. Bot akan restart...');
                     setTimeout(() => exec('pm2 restart video-bot'), 2000);
                 });
             } else {
-                ctx.reply('🚀 **MENYEDIAKAN REBOOT SISTEM...**\nBot akan online semula dalam beberapa saat dengan feature terbaru.', { parse_mode: 'Markdown' });
-                setTimeout(() => {
-                    exec('pm2 restart video-bot');
-                }, 3000);
+                ctx.reply('Fail disimpan. Bot akan restart dalam 3 saat...');
+                setTimeout(() => exec('pm2 restart video-bot'), 3000);
             }
         } catch (err) {
-            ctx.reply(`❌ **PROSES GAGAL:**\n\`${err.message}\``);
+            ctx.reply('Gagal update: ' + err.message);
         }
     }
 });
