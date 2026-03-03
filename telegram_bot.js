@@ -334,7 +334,7 @@ bot.on('document', async (ctx) => {
     const fileName = file.file_name;
 
     if (fileName === 'telegram_bot.js' || fileName === 'package.json') {
-        const msg = await ctx.reply(`📥 **MENERIMA FAIL ${fileName.toUpperCase()}**\n\n[░░░░░░░░░░] 0% — Menunggu...`, { parse_mode: 'Markdown' });
+        const msg = await ctx.reply(`📥 **MENERIMA FAIL \`${fileName.toUpperCase()}\`**\n\n[░░░░░░░░░░] 0% — Menunggu...`, { parse_mode: 'Markdown' });
 
         try {
             // STEP 1: Download
