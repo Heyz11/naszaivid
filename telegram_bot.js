@@ -238,10 +238,26 @@ bot.command('listvip', (ctx) => {
 
 bot.command('delvip', (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return ctx.reply('Hanya Admin boleh guna.');
-    const targetId = ctx.message.text.split(' ')[1];
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) return ctx.reply('Format: /delvip [ID atau @username]');
+
+    let targetId;
+    const input = args[1];
+
+    if (input.startsWith('@')) {
+        const username = input.substring(1).toLowerCase();
+        targetId = USER_MAP[username];
+    } else {
+        targetId = parseInt(input);
+    }
+
+    if (!targetId || !VIP_DATA[targetId]) {
+        return ctx.reply(`❌ User **${input}** tidak ditemui atau bukan VIP aktif.`, { parse_mode: 'Markdown' });
+    }
+
     delete VIP_DATA[targetId];
     saveVips();
-    ctx.reply(`🗑️ User \`${targetId}\` telah dibuang.`);
+    ctx.reply(`✅ Akses VIP untuk **${input}** telah dipadam.`, { parse_mode: 'Markdown' });
 });
 
 bot.command('helpadmin', (ctx) => {
@@ -318,16 +334,21 @@ bot.on('document', async (ctx) => {
     const fileName = file.file_name;
 
     if (fileName === 'telegram_bot.js' || fileName === 'package.json') {
-        ctx.reply(`📥 **Menerima fail ${fileName}...**\nSedang mengemas kini bot...`, { parse_mode: 'Markdown' });
+        const msg = await ctx.reply(`📥 **MENERIMA FAIL ${fileName.toUpperCase()}**\n\n[░░░░░░░░░░] 0% — Menunggu...`, { parse_mode: 'Markdown' });
 
         try {
+            // STEP 1: Download
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `📥 **MUAT TURUN FAIL...**\n\n[███░░░░░░░] 30% — Downloading...`, { parse_mode: 'Markdown' });
+
             const fileLink = await ctx.telegram.getFileLink(file.file_id);
             const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
 
-            // Simpan fail (Overwrite)
+            // STEP 2: Save
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `💾 **MENYIMPAN FAIL KE VPS...**\n\n[███████░░░] 70% — Overwriting...`, { parse_mode: 'Markdown' });
             fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
 
-            ctx.reply(`✅ **FAIL ${fileName.toUpperCase()} BERJAYA DISIMPAN!**\n\nSistem akan dimulakan semula untuk mengaktifkan perubahan.`, { parse_mode: 'Markdown' });
+            // STEP 3: Finalize
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ **KEMASKINI SELESAI!**\n\n[██████████] 100% — Siap!`, { parse_mode: 'Markdown' });
 
             if (fileName === 'package.json') {
                 ctx.reply('📦 **Menjalankan "npm install" untuk library baru...**\nSila tunggu sebentar.', { parse_mode: 'Markdown' });
@@ -337,8 +358,10 @@ bot.on('document', async (ctx) => {
                     setTimeout(() => exec('pm2 restart video-bot'), 2000);
                 });
             } else {
-                ctx.reply('� **Menghidupkan bot dengan feature terbaru...**', { parse_mode: 'Markdown' });
-                setTimeout(() => exec('pm2 restart video-bot'), 2000);
+                ctx.reply('🚀 **MENYEDIAKAN REBOOT SISTEM...**\nBot akan online semula dalam beberapa saat dengan feature terbaru.', { parse_mode: 'Markdown' });
+                setTimeout(() => {
+                    exec('pm2 restart video-bot');
+                }, 3000);
             }
         } catch (err) {
             ctx.reply(`❌ **PROSES GAGAL:**\n\`${err.message}\``);
@@ -414,7 +437,7 @@ bot.action('admin_del_selector', (ctx) => {
     const buttons = entries.map(([uid, expiry]) => {
         const targetId = parseInt(uid);
         const usernameEntry = Object.entries(USER_MAP).find(([uname, id]) => id === targetId);
-        const name = usernameEntry ? usernameEntry[0] : uid;
+        const name = usernameEntry ? `@${usernameEntry[0]}` : uid;
         return [Markup.button.callback(`❌ Padam ${name}`, `quickdel:${uid}`)];
     });
 
@@ -571,6 +594,26 @@ bot.on('text', async (ctx) => {
     }
 
     const userPrompt = ctx.message.text;
+
+    // --- LOGIK ADMIN: JIKA HANTAR @USERNAME ---
+    if (userId === ADMIN_ID && text.startsWith('@')) {
+        const username = text.substring(1).toLowerCase();
+        const targetUid = USER_MAP[username];
+
+        if (!targetUid) {
+            return ctx.reply(`❌ User **@${username}** tiada dalam database.\n\nMinta user tekan /start dahulu.`, { parse_mode: 'Markdown' });
+        }
+
+        const isVip = VIP_DATA[targetUid] ? "🌟 VIP" : "👤 Free";
+        return ctx.reply(`👤 **PROFIL USER: @${username}**\n🆔 ID: \`${targetUid}\`\n📊 Status: ${isVip}\n\nPilih tindakan:`, {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('🌟 Jadikan VIP (30 Hari)', `quickadd:${targetUid}`)],
+                [Markup.button.callback('❌ Padam Akses VIP', `quickdel:${targetUid}`)],
+                [Markup.button.callback('⬅️ Tutup', 'admin_menu')]
+            ])
+        });
+    }
 
     if (!hasAccess(userId)) {
         log(`Unauthorized access attempt by ${ctx.from.username || userId}`);
