@@ -595,18 +595,20 @@ bot.on('text', async (ctx) => {
 
     const userPrompt = ctx.message.text;
 
-    // --- LOGIK ADMIN: JIKA HANTAR @USERNAME ---
-    if (userId === ADMIN_ID && text.startsWith('@')) {
-        const username = text.substring(1).toLowerCase();
-        const targetUid = USER_MAP[username];
+    // --- LOGIK ADMIN: JIKA HANTAR USERNAME (dengan atau tanpa @) ---
+    if (userId === ADMIN_ID && (userPrompt.startsWith('@') || USER_MAP[userPrompt.toLowerCase()] || USER_MAP['@' + userPrompt.toLowerCase()])) {
+        // Normalize - buang @ kalau ada
+        const rawName = userPrompt.startsWith('@') ? userPrompt.substring(1).toLowerCase() : userPrompt.toLowerCase();
+
+        // Cari dalam USER_MAP (cuba dengan dan tanpa @)
+        const targetUid = USER_MAP[rawName] || USER_MAP['@' + rawName] || USER_MAP[rawName.replace('@', '')];
 
         if (!targetUid) {
-            return ctx.reply(`❌ User **@${username}** tiada dalam database.\n\nMinta user tekan /start dahulu.`, { parse_mode: 'Markdown' });
+            return ctx.reply(`❌ User "${userPrompt}" tiada dalam database.\n\nMinta user tekan /start dahulu supaya bot kenal mereka.`);
         }
 
-        const isVip = VIP_DATA[targetUid] ? "🌟 VIP" : "👤 Free";
-        return ctx.reply(`👤 **PROFIL USER: @${username}**\n🆔 ID: \`${targetUid}\`\n📊 Status: ${isVip}\n\nPilih tindakan:`, {
-            parse_mode: 'Markdown',
+        const isVip = VIP_DATA[targetUid] ? '🌟 VIP Aktif' : '👤 Free User';
+        return ctx.reply(`👤 PROFIL USER: @${rawName}\nID: ${targetUid}\nStatus: ${isVip}\n\nPilih tindakan:`, {
             ...Markup.inlineKeyboard([
                 [Markup.button.callback('🌟 Jadikan VIP (30 Hari)', `quickadd:${targetUid}`)],
                 [Markup.button.callback('❌ Padam Akses VIP', `quickdel:${targetUid}`)],
