@@ -14,6 +14,7 @@ const execPromise = util.promisify(exec); // Promisify exec untuk penggunaan asy
 const BOT_TOKEN = '8686387006:AAFmVYOAKk_8HCWa_0mGawKBfqxbWAnMRIw';
 const VIDEOGEN_API_KEY = 'lannetech_ea1b2c4e4950ec66374d5c34adad034fc1c78c5e75a39baff25aae560add1d6c';
 const IMGBB_API_KEY = '06d6389800ecd4b76ec3646aebfa7d61';
+const APIMART_API_KEY = 'sk-0oztviOx3D6ZT9OcdmLRNuB5Q71xaD4UjXyREqlMOcMlDyXh';
 
 // --- SISTEM ADMIN & VIP ---
 const ADMIN_ID = 7583026606; // ID anda sudah dikunci secara kekal
@@ -852,7 +853,9 @@ bot.action(/gen:(.+)/, async (ctx) => {
 
 // Fungsi Utama Penjanaan Video (Digunakan oleh Text-to-Video & Image-to-Video)
 async function generateVideo(ctx, model, prompt, fileId) {
+    const userId = ctx.from.id;
     const modelName = MODELS.find(m => m.id === model)?.name || model;
+    const rawRatio = sessionData.get(userId)?.ratio || "16:9";
 
     try {
         let publicImageUrl = null;
@@ -868,36 +871,63 @@ async function generateVideo(ctx, model, prompt, fileId) {
             await ctx.reply(`🚀 Menyiapkan penjanaan Text-to-Video...\nModel: *${modelName}*`, { parse_mode: 'Markdown' });
         }
 
-        // Map ratio ke format API (16:9 -> horizontal, 9:16 -> vertical)
-        const rawRatio = sessionData.get(ctx.from.id)?.ratio || "16:9";
-        const apiRatio = rawRatio === "16:9" ? "horizontal" : (rawRatio === "9:16" ? "vertical" : "square");
+        let response;
+        if (model === 'sora-2') {
+            // --- LOGIK APIMART (SORA 2 REAL) ---
+            const payload = {
+                model: "sora-2",
+                prompt: prompt,
+                duration: 15, // Sora 2 APIMart guna 15s
+                aspect_ratio: rawRatio, // Gunakan format 16:9 / 9:16
+                image_urls: publicImageUrl ? [publicImageUrl] : []
+            };
 
-        const payload = {
-            model: model,
-            prompt: prompt,
-            duration: model === 'nanobanana-video' ? 5 : 6, // 5s untuk Banana, 6s untuk LTX
-            resolution: model === 'nanobanana-video' ? "480p" : "1080p", // Banana guna 480p ikut contoh
-            aspect_ratio: apiRatio
-        };
-        if (publicImageUrl) payload.image_url = publicImageUrl;
+            log(`Apimart Payload: ${JSON.stringify(payload)}`);
+            response = await axios.post('https://api.apimart.ai/v1/videos/generations', payload, {
+                headers: {
+                    'Authorization': `Bearer ${APIMART_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 60000
+            });
 
-        log(`Payload Hantar: ${JSON.stringify(payload)}`);
+            if (response.data && (response.data.id || response.data.data?.id)) {
+                const genId = response.data.id || response.data.data.id;
+                ctx.reply(`✅ Permintaan Sora 2 Diterima!\n\n🆔 *Gen ID:* \`${genId}\`\n⏳ Status: Memproses (APIMart)...\n\nSila tunggu video siap.`);
+                checkStatus(ctx, genId, 'apimart');
+            } else {
+                throw new Error(response.data?.message || 'Gagal memulakan task di APIMart.');
+            }
 
-        const response = await axios.post('https://videogenapi.com/api/v1/generate', payload, {
-            headers: {
-                'Authorization': `Bearer ${VIDEOGEN_API_KEY.trim()}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            timeout: 60000
-        });
-
-        if (response.data.success || response.status === 200) {
-            const genId = response.data.generation_id;
-            ctx.reply(`✅ Permintaan diterima!\n\n🆔 *Gen ID:* \`${genId}\`\n⏳ Status: Memproses...\n\nSaya akan mula menyemak status video anda setiap 15 saat.`);
-            checkStatus(ctx, genId);
         } else {
-            throw new Error(response.data.message || 'API gagal membalas.');
+            // --- LOGIK VIDEOGEN ---
+            const apiRatio = rawRatio === "16:9" ? "horizontal" : (rawRatio === "9:16" ? "vertical" : "square");
+            const payload = {
+                model: model,
+                prompt: prompt,
+                duration: model === 'nanobanana-video' ? 5 : 6,
+                resolution: model === 'nanobanana-video' ? "480p" : "1080p",
+                aspect_ratio: apiRatio
+            };
+            if (publicImageUrl) payload.image_url = publicImageUrl;
+
+            log(`VideoGen Payload: ${JSON.stringify(payload)}`);
+            response = await axios.post('https://videogenapi.com/api/v1/generate', payload, {
+                headers: {
+                    'Authorization': `Bearer ${VIDEOGEN_API_KEY.trim()}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 60000
+            });
+
+            if (response.data.success || response.status === 200) {
+                const genId = response.data.generation_id;
+                ctx.reply(`✅ Permintaan diterima!\n\n🆔 *Gen ID:* \`${genId}\`\n⏳ Status: Memproses...\n\nMenyemak status setiap 15 saat.`);
+                checkStatus(ctx, genId, 'videogen');
+            } else {
+                throw new Error(response.data.message || 'API gagal membalas.');
+            }
         }
 
     } catch (error) {
@@ -927,10 +957,9 @@ function formatTime(seconds) {
 }
 
 // Fungsi untuk semak status video secara berkala dengan Progress Indicator
-async function checkStatus(ctx, genId) {
+async function checkStatus(ctx, genId, engine = 'videogen') {
     const startTime = Date.now();
-    // Hantar mesej status awal dan simpan mesej tersebut untuk di'edit' nanti
-    let statusMsg = await ctx.reply(`⏳ Sedang menyediakan video... [░░░░░░░░░░] 0%\nMasa: 0s`);
+    let statusMsg = await ctx.reply(`⏳ Sedang menyediakan video... [░░░░░░░░░░] 0%\nEnjin: ${engine.toUpperCase()}\nMasa: 0s`);
 
     let lastProgress = 0;
     const pollInterval = setInterval(async () => {
@@ -938,11 +967,17 @@ async function checkStatus(ctx, genId) {
             const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
             const timeStr = formatTime(elapsedTime);
 
-            const response = await axios.get(`https://videogenapi.com/api/v1/status/${genId}`, {
-                headers: { 'Authorization': `Bearer ${VIDEOGEN_API_KEY}` }
-            });
+            let urlStatus, headers;
+            if (engine === 'apimart') {
+                urlStatus = `https://api.apimart.ai/v1/videos/generations/${genId}`;
+                headers = { 'Authorization': `Bearer ${APIMART_API_KEY}` };
+            } else {
+                urlStatus = `https://videogenapi.com/api/v1/status/${genId}`;
+                headers = { 'Authorization': `Bearer ${VIDEOGEN_API_KEY}` };
+            }
 
-            const data = response.data;
+            const response = await axios.get(urlStatus, { headers });
+            const data = response.data.data || response.data; // Cover both structures
             const status = (data.status || 'processing').toLowerCase();
             let progress = data.progress || lastProgress;
 
