@@ -689,6 +689,23 @@ bot.on('photo', async (ctx) => {
     }
 });
 
+// 2. Bila user hantar video (Untuk Upscale Video)
+bot.on('video', async (ctx) => {
+    const userId = ctx.from.id;
+    if (!hasAccess(userId)) return accessDenied(ctx);
+
+    const fileId = ctx.message.video.file_id;
+    sessionData.set(userId, { fileId: fileId, status: 'ready_upscale_video' });
+
+    ctx.reply('🎥 **Video Diterima!**\n\nAdakah anda mahu **Upscale (Jernihkan Kualiti)** video ini menggunakan enjin FGSI?', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('✨ Upscale Video Ini', 'action:upscale_video')],
+            [Markup.button.callback('❌ Batal', 'action:cancel_upscale')]
+        ])
+    });
+});
+
 bot.action('action:upscale', async (ctx) => {
     await ctx.answerCbQuery();
     const userId = ctx.from.id;
@@ -748,6 +765,70 @@ bot.action(/^upscale_run:(\d+)$/, async (ctx) => {
     } catch (error) {
         ctx.reply(`❌ Ralat: ${error.message}`);
     } finally {
+        sessionData.delete(userId);
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    }
+});
+
+bot.action('action:upscale_video', async (ctx) => {
+    await ctx.answerCbQuery();
+    const userId = ctx.from.id;
+    const session = sessionData.get(userId);
+
+    if (!session || !session.fileId) {
+        return ctx.reply('Sesi tamat atau tidak sah. Sila hantar video semula.');
+    }
+
+    const tempDir = path.join(__dirname, 'tmp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+    const tempPath = path.join(tempDir, `video_upscale_${userId}_${Date.now()}.mp4`);
+    let statusMsg;
+
+    try {
+        statusMsg = await ctx.reply(`⏳ **FGSI Engine** sedang memproses upscale video anda...\nSila tunggu (1-3 minit).`, { parse_mode: 'Markdown' });
+
+        const fileLink = await ctx.telegram.getFileLink(session.fileId);
+        const writer = fs.createWriteStream(tempPath);
+        const responseDl = await axios({ url: fileLink.href, method: 'GET', responseType: 'stream' });
+
+        responseDl.data.pipe(writer);
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve); writer.on('error', reject);
+        });
+
+        // Hantar ke FGSI
+        const form = new FormData();
+        form.append('file', fs.createReadStream(tempPath), 'video.mp4');
+
+        const fgsiRes = await axios.post("https://fgsi.dpdns.org/api/tools/wink", form, {
+            headers: {
+                ...form.getHeaders(),
+                "Content-Type": "multipart/form-data",
+                "apikey": "fgsiapi-e171aa3-6d"
+            },
+            timeout: 300000 // Limit 5 minit
+        });
+
+        const data = fgsiRes.data;
+        if (data && (data.status === true || data.url || data.data?.url)) {
+            const resultUrl = data.url || data.data?.url || data.result;
+            if (resultUrl) {
+                await ctx.replyWithVideo({ url: resultUrl }, {
+                    caption: `✅ **Upscale Video Selesai!**\n🎯 Enjin: FGSI (Wink)`
+                });
+            } else {
+                throw new Error("Gagal mendapatkan link video dari balasan API.");
+            }
+        } else {
+            throw new Error("API membalas dengan status ralat.");
+        }
+
+    } catch (error) {
+        let errDesc = error.response?.data?.message || error.message;
+        ctx.reply(`❌ Ralat Upscale Video: ${errDesc}`);
+    } finally {
+        if (statusMsg) await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => { });
         sessionData.delete(userId);
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     }
