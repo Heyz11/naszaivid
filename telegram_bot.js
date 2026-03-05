@@ -134,31 +134,64 @@ async function uploadToCloud(telegramUrl) {
     }
 }
 
-
-/**
- * Fungsi baru: Upload ke Telegra.ph (Lebih stabil untuk API Upscale)
- * Tiada limit yang ketat & direct link (graph.org)
- */
-async function uploadToTelegraph(fileUrl) {
+// ---------------------------------------------------------
+// iLoveIMG / iLovePDF Scraper (HD 2x/4x)
+// ---------------------------------------------------------
+async function imageUpscaler(filePath, multiplier = '2') {
     try {
-        log('📤 Mengunggah gambar ke Telegra.ph...');
-        const resDl = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-        const form = new FormData();
-        form.append('file', Buffer.from(resDl.data), { filename: 'image.jpg' });
-
-        const res = await axios.post('https://graph.org/upload', form, {
-            headers: form.getHeaders()
+        log(`� Memulakan iLoveIMG Scraper (${multiplier}x)...`);
+        const res = await axios.get('https://www.iloveimg.com/id/tingkatkan-gambar', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
 
-        if (res.data && res.data[0] && res.data[0].src) {
-            const link = 'https://graph.org' + res.data[0].src;
-            log(`✅ Link Telegra.ph: ${link}`);
-            return link;
-        }
-        return null;
+        const html = res.data;
+        const token = html.match(/"token":"([^"]+)"/)?.[1];
+        const taskId = html.match(/ilovepdfConfig\.taskId\s*=\s*'([^']+)'/)?.[1];
+
+        if (!token || !taskId) throw new Error('Gagal ambil token/taskId iLoveIMG');
+
+        const fileName = path.basename(filePath);
+        const form = new FormData();
+        form.append('name', fileName);
+        form.append('chunk', '0');
+        form.append('chunks', '1');
+        form.append('task', taskId);
+        form.append('preview', '1');
+        form.append('pdfinfo', '0');
+        form.append('pdfforms', '0');
+        form.append('pdfresetforms', '0');
+        form.append('v', 'web.0');
+        form.append('file', fs.createReadStream(filePath));
+
+        const uploadRes = await axios.post('https://api1g.iloveimg.com/v1/upload', form, {
+            headers: { ...form.getHeaders(), 'Authorization': `Bearer ${token}` }
+        });
+
+        const serverFilename = uploadRes.data.server_filename;
+
+        const processForm = new FormData();
+        processForm.append('packaged_filename', 'iloveimg-upscaled');
+        processForm.append('multiplier', multiplier.toString());
+        processForm.append('task', taskId);
+        processForm.append('tool', 'upscaleimage');
+        processForm.append('files[0][server_filename]', serverFilename);
+        processForm.append('files[0][filename]', fileName);
+
+        const processRes = await axios.post('https://api1g.iloveimg.com/v1/process', processForm, {
+            headers: { ...processForm.getHeaders(), 'Authorization': `Bearer ${token}`, 'Origin': 'https://www.iloveimg.com' }
+        });
+
+        if (processRes.data.status !== 'TaskSuccess') throw new Error('Processing fail');
+
+        return {
+            success: true,
+            url: `https://api1g.iloveimg.com/v1/download/${taskId}`,
+            downloadFilename: processRes.data.download_filename || 'upscaled_image.png'
+        };
+
     } catch (err) {
-        log(`❌ Ralat Telegra.ph: ${err.message}`);
-        return null;
+        log(`❌ iLoveIMG Error: ${err.message}`);
+        return { success: false, error: err.message };
     }
 }
 
@@ -643,47 +676,63 @@ bot.action('action:upscale', async (ctx) => {
     await ctx.answerCbQuery();
     const userId = ctx.from.id;
     const session = sessionData.get(userId);
+
     if (!session || !session.fileId) {
         return ctx.reply('Sesi tamat atau tidak sah. Sila hantar gambar semula.');
     }
 
+    await ctx.editMessageText('🚀 **Pilih Tahap Kualiti iLovePDF:**\n\n- **2x**: Pantas & Tajam.\n- **4x**: Super HD (Terbaik untuk cetakan).', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('✨ 2x (Standard)', 'upscale_run:2'), Markup.button.callback('💎 4x (Super HD)', 'upscale_run:4')],
+            [Markup.button.callback('❌ Batal', 'action:cancel_upscale')]
+        ])
+    });
+});
+
+bot.action(/^upscale_run:(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const multiplier = ctx.match[1];
+    const userId = ctx.from.id;
+    const session = sessionData.get(userId);
+
+    if (!session || !session.fileId) {
+        return ctx.reply('Sesi tamat. Sila hantar gambar semula.');
+    }
+
+    const tempDir = path.join(__dirname, 'tmp');
+    const tempPath = path.join(tempDir, `upscale_${userId}_${Date.now()}.jpg`);
+
     try {
-        const msg = await ctx.reply('⏳ **Sedang memproses Upscale...**\nEnjin: Fgsi-HD (Laju & Stabil)');
+        await ctx.editMessageText(`⏳ **iLovePDF Engine** sedang memproses **${multiplier}x HD**...`);
 
-        // 1. Dapatkan Link & Upload ke Telegra.ph (Untuk elakkan ralat link)
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
         const fileLink = await ctx.telegram.getFileLink(session.fileId);
-        const publicUrl = await uploadToTelegraph(fileLink.href);
+        const writer = fs.createWriteStream(tempPath);
+        const responseDl = await axios({ url: fileLink.href, method: 'GET', responseType: 'stream' });
 
-        if (!publicUrl) {
-            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal akses gambar. Sila hantar semula.');
-        }
-
-        // 2. Tanya API Fgsi
-        const response = await axios.get("https://fgsi.dpdns.org/api/tools/upscale", {
-            params: {
-                apikey: "fgsiapi-e171aa3-6d",
-                url: publicUrl,
-            },
-            headers: { accept: "application/json" },
-            timeout: 60000
+        responseDl.data.pipe(writer);
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve); writer.on('error', reject);
         });
 
-        const resultUrl = response.data.result || response.data.url || response.data.data;
+        const upRes = await imageUpscaler(tempPath, multiplier);
 
-        if (resultUrl && typeof resultUrl === 'string') {
+        if (upRes.success) {
             await ctx.deleteMessage().catch(() => { });
-            await ctx.replyWithPhoto({ url: resultUrl }, {
-                caption: '✅ **Upscale Selesai!**\nKualiti telah digandakan (4x HD).'
+            await ctx.replyWithPhoto({ url: upRes.url }, {
+                caption: `✅ **Upscale Selesai!** (${multiplier}x HD)\n🎯 Enjin: iLovePDF Scraper`
             });
         } else {
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `❌ API Upscale sibuk atau ralat.\nSila cuba sebentar lagi.`);
+            await ctx.editMessageText(`❌ iLovePDF sibuk. Sila cuba lagi atau guna model lain.`);
         }
 
     } catch (error) {
-        log(`Upscale Error: ${error.message}`);
-        ctx.reply(`❌ Upscale gagal: ${error.message}`);
+        ctx.reply(`❌ Ralat: ${error.message}`);
     } finally {
         sessionData.delete(userId);
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     }
 });
 
