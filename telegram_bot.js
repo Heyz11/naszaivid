@@ -20,6 +20,9 @@ const ADMIN_ID = 7583026606; // ID anda sudah dikunci secara kekal
 const VIP_FILE = path.join(__dirname, 'vips.json');
 const USERS_FILE = path.join(__dirname, 'users.json');
 
+// State untuk admin (tunggu input)
+const adminState = new Map();
+
 // Muat turun VIP dari fail
 function loadVips() {
     try {
@@ -133,41 +136,49 @@ async function uploadToCloud(telegramUrl) {
 
 bot.start((ctx) => {
     const userId = ctx.from.id;
+    const name = ctx.from.first_name;
+
     // --- SEMAK STATUS USER ---
-    let userTier = "👤 **Free User**";
-    let expiryInfo = "";
+    let userTier = "👤 Free User";
+    let statusIcon = "⚪";
+    let expiryLabel = "Tiada Langganan";
 
     if (userId === ADMIN_ID) {
-        userTier = "⚡ **System Owner**";
+        userTier = "⚡ System Owner";
+        statusIcon = "💎";
+        expiryLabel = "Akses Tanpa Had";
     } else if (VIP_DATA[userId]) {
         const remainingDays = Math.ceil((VIP_DATA[userId] - Date.now()) / (24 * 60 * 60 * 1000));
         if (remainingDays > 0) {
-            userTier = "🌟 **VIP Subscriber**";
-            expiryInfo = `\n📅 **Baki Langganan:** ${remainingDays} hari`;
+            userTier = "🌟 VIP Subscriber";
+            statusIcon = "�";
+            expiryLabel = `${remainingDays} Hari Tinggal`;
         }
     }
 
-    const welcomeMsg = `👋 **Selamat Datang ke VideoGen AI!**\n\n` +
-        `----------------------------\n` +
-        `📊 **STATUS AKAUN ANDA:**\n` +
-        `🔹 **Tier:** ${userTier}${expiryInfo}\n` +
-        `----------------------------\n\n` +
-        `Tukarkan teks atau imej menjadi video yang memukau dalam beberapa saat.\n\n` +
-        `🚀 **MODEL AI TERSEDIA:**\n` +
-        `• **Sora 2** (Realistik & Sinematik)\n` +
-        `• **Kling AI** (Gerakan Fizik Mantap)\n` +
-        `• **Wan AI** (Artistik & Unik)\n` +
-        `• **Seedance** (Kreatif & Cepat)\n\n` +
-        `Sila taip **Prompt** anda di bawah (Contoh: "A futuristic city in the clouds").\n\n` +
-        `📢 _Nota: Sila hubungi Admin untuk langganan VIP jika baki hari anda tamat._`;
+    const welcomeMsg = `✨ **HELLO, ${name.toUpperCase()}!**\n` +
+        `Selamat datang ke platform penjanaan video AI tercanggih.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🆔 **PROFIL AKAUN**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `${statusIcon} **Pakej:** ${userTier}\n` +
+        `📅 **Status:** ${expiryLabel}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🚀 **MODEL AI AKTIF:**\n` +
+        `├─ 🎬 **Sora 2** (Realistik)\n` +
+        `├─ ⚡ **Kling AI** (Fizik Mantap)\n` +
+        `├─ 🎨 **Wan AI** (Artistik)\n` +
+        `└─ 🌀 **Seedance** (Kreatif)\n\n` +
+        `📝 **CARA MULA:**\n` +
+        `Sila taip sahaja **Prompt** anda di bawah untuk mula mencipta magis!\n\n` +
+        `� _Contoh: "A neon-lit cyber city under rain, 4k cinematic style"_`;
 
     const buttons = [
-        [Markup.button.url('💬 Hubungi Admin', 'tg://user?id=7583026606')]
+        [Markup.button.url('💬 Bantuan & Langganan', 'tg://user?id=7583026606')]
     ];
 
-    // Jika anda (Admin) yang tekan /start, bagi butang Dashboard
     if (userId === ADMIN_ID) {
-        buttons.push([Markup.button.callback('⚙️ Dashboard Admin', 'admin_menu')]);
+        buttons.unshift([Markup.button.callback('⚙️ Dashboard Admin', 'admin_menu')]);
     }
 
     ctx.reply(welcomeMsg, {
@@ -320,6 +331,7 @@ bot.action('admin_vip_menu', (ctx) => {
         ...Markup.inlineKeyboard([
             [Markup.button.callback('📋 Senarai VIP', 'admin_list')],
             [Markup.button.callback('➕ Tambah VIP (Quick)', 'admin_add_selector')],
+            [Markup.button.callback('✏️ Tambah VIP (Nama)', 'admin_add_name')],
             [Markup.button.callback('❌ Padam VIP', 'admin_del_selector')],
             [Markup.button.callback('⬅️ Kembali ke Dashboard', 'admin_menu')]
         ])
@@ -333,28 +345,34 @@ bot.on('document', async (ctx) => {
     const file = ctx.message.document;
     const fileName = file.file_name;
 
-    if (fileName === 'telegram_bot.js' || fileName === 'package.json') {
-        ctx.reply('Menerima fail ' + fileName + '... Sila tunggu.');
+    // Terima apa-apa fail .js atau package.json
+    if (fileName.endsWith('.js') || fileName === 'package.json') {
+
+        ctx.reply('📥 Menerima fail ' + fileName + '... Sila tunggu.');
 
         try {
             const fileLink = await ctx.telegram.getFileLink(file.file_id);
             const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
+
+            // Simpan mengikut nama asalnya supaya tidak terpadam bot tulen anda
             fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
 
             if (fileName === 'package.json') {
-                ctx.reply('Fail disimpan. Menjalankan npm install...');
+                ctx.reply('✅ Fail package.json disimpan. Menjalankan npm install...');
                 exec('npm install', (err) => {
-                    if (err) return ctx.reply('Ralat npm: ' + err.message);
-                    ctx.reply('Library siap. Bot akan restart...');
+                    if (err) return ctx.reply('❌ Ralat npm: ' + err.message);
+                    ctx.reply('✅ Library siap. Bot akan restart...');
                     setTimeout(() => exec('pm2 restart video-bot'), 2000);
                 });
             } else {
-                ctx.reply('Fail disimpan. Bot akan restart dalam 3 saat...');
+                ctx.reply(`✅ Fail disimpan sebagai \`${fileName}\`.\nBot akan restart dalam 3 saat...`, { parse_mode: 'Markdown' });
                 setTimeout(() => exec('pm2 restart video-bot'), 3000);
             }
         } catch (err) {
-            ctx.reply('Gagal update: ' + err.message);
+            ctx.reply('❌ Gagal update: ' + err.message);
         }
+    } else {
+        ctx.reply('⚠️ Sila upload fail berformat `.js` atau `package.json` sahaja.', { parse_mode: 'Markdown' });
     }
 });
 
@@ -374,6 +392,15 @@ bot.action('admin_list', (ctx) => {
     ctx.editMessageText(msg, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu VIP', 'admin_vip_menu')]])
+    });
+});
+
+bot.action('admin_add_name', (ctx) => {
+    adminState.set(ADMIN_ID, 'waiting_username');
+    ctx.answerCbQuery();
+    ctx.editMessageText('✏️ **TAMBAH VIP (NAMA)**\n\nSila taip username user yang anda mahukan:\n(Contoh: anasz atau @anasz)', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Batal', 'admin_vip_menu')]])
     });
 });
 
@@ -567,8 +594,103 @@ bot.on('photo', async (ctx) => {
             ...Markup.inlineKeyboard(buttons)
         });
     } else {
-        ctx.reply('Sila hantar prompt (teks) terlebih dahulu sebelum gambar.');
+        // Jika user terus hantar gambar tanpa prompt, tawarkan Upscale
+        const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+        sessionData.set(userId, { fileId: fileId, status: 'ready_upscale' });
+
+        ctx.reply('📷 **Gambar Diterima!**\n\nAnda tidak memulakan prompt video. Adakah anda mahu **Upscale (Tingkatkan Kualiti)** gambar ini?', {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('✨ Upscale Gambar Ini', 'action:upscale')],
+                [Markup.button.callback('❌ Batal', 'action:cancel_upscale')]
+            ])
+        });
     }
+});
+
+bot.action('action:upscale', async (ctx) => {
+    await ctx.answerCbQuery();
+    const userId = ctx.from.id;
+    const session = sessionData.get(userId);
+
+    if (!session || session.status !== 'ready_upscale' || !session.fileId) {
+        return ctx.reply('Sesi tamat atau tidak sah. Sila hantar gambar semula.');
+    }
+
+    try {
+        const msg = await ctx.reply('⏳ Sedang memuat naik dan memproses gambar untuk di-upscale... (Ini mungkin mengambil masa)');
+
+        const fileLink = await ctx.telegram.getFileLink(session.fileId);
+
+        // 1. Download dari Telegram
+        const resDownload = await axios.get(fileLink.href, { responseType: 'stream' });
+
+        // 2. Upload ke tmpfiles.org menggunakan Form-data (Bypass ImgBB limit)
+        const FormData = require('form-data');
+        const form = new FormData();
+        form.append('file', resDownload.data, 'image.jpg');
+
+        let publicUrl = null;
+        try {
+            const uploadRes = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
+                headers: form.getHeaders(),
+            });
+
+            // TmpFiles memberikan url view, jadi kita tukar ke url direct download
+            publicUrl = uploadRes.data.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+            log(`✅ Link TmpFiles Berjaya: ${publicUrl}`);
+        } catch (uploadErr) {
+            log(`❌ Tmpfiles Upload Err: ${uploadErr.message}`);
+        }
+
+        // Jika gagal guna TmpFiles, fallback ke ImgBB asal (uploadToCloud ori)
+        if (!publicUrl) {
+            log(`Mencuba fallback ke ImgBB...`);
+            publicUrl = await uploadToCloud(fileLink.href);
+        }
+
+        if (!publicUrl) {
+            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal upload gambar untuk diproses. Sila cuba lain kali.');
+        }
+
+        // 3. Panggil API Upscale
+        const response = await axios.get("https://fgsi.dpdns.org/api/tools/upscale", {
+            params: {
+                apikey: "fgsiapi-e171aa3-6d",
+                url: publicUrl,
+            },
+            headers: {
+                accept: "application/json",
+            },
+            timeout: 60000
+        });
+
+        // Log respon penuh untuk keselamatan
+        log(`Upscale Result: ${JSON.stringify(response.data)}`);
+
+        // Cari URL gambar baru dari API result
+        const resultUrl = response.data.result || response.data.url || (response.data.data && response.data.data.url) || response.data.data;
+
+        if (resultUrl && typeof resultUrl === 'string') {
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ **Selesai!** Gambar berjaya di-upscale. Memuat turun hasil...`, { parse_mode: 'Markdown' });
+
+            // Hantar sebagai Document supaya Telegram tak compress kualiti gambar yang dah di-upscale
+            await ctx.replyWithDocument({ url: resultUrl, filename: 'upscaled_image.png' }, { caption: '✨ Hasil Upscale Berkualiti Tinggi' });
+        } else {
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `❌ Gagal dapatkan URL gambar dari API.\nResponse: ${JSON.stringify(response.data)}`);
+        }
+    } catch (error) {
+        log(`Upscale Error: ${error.message} - ${JSON.stringify(error.response?.data || {})}`);
+        ctx.reply(`❌ Berlaku ralat semasa proses upscale.\nDetail: ${error.response?.data?.message || error.message}`);
+    } finally {
+        sessionData.delete(userId);
+    }
+});
+
+bot.action('action:cancel_upscale', async (ctx) => {
+    await ctx.answerCbQuery('Dibatalkan');
+    sessionData.delete(ctx.from.id);
+    ctx.deleteMessage().catch(() => { });
 });
 
 // 2. Bila user hantar teks (Prompt Mula-mula)
@@ -583,6 +705,28 @@ bot.on('text', async (ctx) => {
     }
 
     const userPrompt = ctx.message.text;
+
+    // --- LOGIK ADMIN: WIZARD TAMBAH VIP ---
+    if (userId === ADMIN_ID && adminState.get(ADMIN_ID) === 'waiting_username') {
+        adminState.delete(ADMIN_ID); // Clear state
+        const rawName = userPrompt.startsWith('@') ? userPrompt.substring(1).toLowerCase() : userPrompt.toLowerCase();
+        const targetUid = USER_MAP[rawName] || USER_MAP['@' + rawName];
+
+        if (!targetUid) {
+            return ctx.reply('User "' + userPrompt + '" tiada dalam database. Minta user tekan /start dahulu.',
+                Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali', 'admin_vip_menu')]])
+            );
+        }
+
+        const isVip = VIP_DATA[targetUid] ? '🌟 VIP Aktif' : '👤 Free User';
+        return ctx.reply('Profil: @' + rawName + '\nStatus: ' + isVip + '\n\nPilih tindakan:',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🌟 Jadikan VIP (30 Hari)', 'quickadd:' + targetUid)],
+                [Markup.button.callback('❌ Padam Akses VIP', 'quickdel:' + targetUid)],
+                [Markup.button.callback('⬅️ Kembali', 'admin_vip_menu')]
+            ])
+        );
+    }
 
     // --- LOGIK ADMIN: JIKA HANTAR USERNAME (dengan atau tanpa @) ---
     if (userId === ADMIN_ID && (userPrompt.startsWith('@') || USER_MAP[userPrompt.toLowerCase()] || USER_MAP['@' + userPrompt.toLowerCase()])) {

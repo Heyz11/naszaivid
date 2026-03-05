@@ -1,67 +1,77 @@
-# 🚀 PANDUAN PERMULAAN PROJEK BARU (DARI KOSONG)
-
-Gunakan nota ini jika anda ingin memulakan projek bot Telegram baru pada masa akan datang.
-
----
-
-## FASA 1: DI LAPTOP (SETTING AWAL)
-
-1.  **Buat Folder Baru**: Buat folder (contoh: `MY-NEW-BOT`) dan buka di VS Code.
-2.  **Sediakan Fail**: Cipta fail `telegram_bot.js` dan `package.json`.
-3.  **Initialize Git (KALI PERTAMA SAHAJA)**:
-    Buka terminal dan taip:
-    ```powershell
-    git init
-    git add .
-    git commit -m "initial commit"
-    ```
-4.  **Sambung ke GitHub**:
-    *   Buat Repository baru (Private) di GitHub.com.
-    *   Salin link repo tersebut (https://github.com/USERNAME/REPO-NAME.git).
-    *   Taip di terminal:
-    ```powershell
-    git remote add origin https://github.com/USERNAME/REPO-NAME.git
-    git branch -M main
-    git push -u origin main
-    ```
+# 🚀 PANDUAN BINA BOT BARU (DARI KOSONG)
+Rujukan ini adalah untuk anda membina mana-mana bot baru dengan sistem Admin & VIP yang sudah siap.
 
 ---
 
-## FASA 2: DI VPS (SETUP SERVER KALI PERTAMA)
-
-Selepas anda beli VPS baru, anda kena "basuh" server tu dulu:
-
-1.  **Login SSH**: `ssh root@IP-VPS-ANDA`
-2.  **Install Node.js (KALI PERTAMA SAHAJA)**:
-    ```bash
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt install -y nodejs
-    ```
-3.  **Install PM2 (KALI PERTAMA SAHAJA)**:
-    ```bash
-    npm install -g pm2
-    ```
-4.  **Tarik Kod Dari GitHub**:
-    ```bash
-    git clone https://github.com/USERNAME/REPO-NAME.git
-    cd REPO-NAME
-    npm install
-    ```
-5.  **Hidupkan Bot**:
-    ```bash
-    pm2 start telegram_bot.js --name "video-bot"
-    pm2 startup
-    pm2 save
-    ```
+## 🏗️ LANGKAH 1: DAPATKAN BOT TOKEN
+1. Buka Telegram, cari `@BotFather`.
+2. Taip `/newbot` dan ikut arahan (Beri nama & username bot).
+3. Salin **HTTP API Token** yang diberikan (Simpan elok-elok!).
 
 ---
 
-## FASA 3: CARA UPDATE (SETIAP HARI)
-
-Selepas semuanya sudah siap, anda hanya perlu buat ini untuk hantar feature baru:
-
-1.  **Di Laptop**: Edit kod -> `git add .` -> `git commit -m "update"` -> `git push`.
-2.  **Di Bot Telegram**: Taip `/updatebot` atau klik butang **[🔄 Update Bot]**.
+## 💻 LANGKAH 2: SETUP DI LAPTOP (LOCAL)
+1. Buat folder baru untuk projek baru anda (Contoh: `kedai-bot`).
+2. Salin fail `ADMIN_ENGINE_TEMPLATE.js` masuk ke folder baru ini.
+3. Tukar nama fail tersebut menjadi `bot.js`.
+4. Buka fail `bot.js` guna VS Code.
+5. Pada baris ke-15, tukar `LETAK_TOKEN_BOT_BARU_DI_SINI` kepada Token yang anda dapat dari BotFather tadi.
 
 ---
-**Tip Boss:** Selalu pastikan API KEY anda tidak dikongsi dengan orang lain di GitHub (Gunakan Private Repository). 💎🔥🚀
+
+## 🛠️ LANGKAH 3: TAMBAH FEATURE (LOGIC)
+Cari bahagian `bot.on('text')` dalam kod tersebut. Di sinilah anda letak "tugas" bot anda.
+
+**Contoh jika anda nak buat Bot Jual Barang:**
+```javascript
+bot.on('text', (ctx) => {
+    const text = ctx.message.text;
+    
+    // Feature: Hanya VIP boleh guna fungsi ini
+    if (text === 'Beli Barang' && isVip(ctx.from.id)) {
+        return ctx.reply('Sila pilih barang anda...');
+    } else if (text === 'Beli Barang') {
+        return ctx.reply('Maaf, fungsi ini hanya untuk VIP sahaja!');
+    }
+});
+```
+
+---
+
+## ☁️ LANGKAH 4: SET DI VPS (SERVER)
+1. **Login VPS** guna Terminal (SSH).
+2. **Buat Folder Baru** di VPS:
+   ```bash
+   mkdir bot-baru && cd bot-baru
+   ```
+3. **Install "Library" Penting** (Wajib buat sekali sahaja):
+   ```bash
+   npm init -y
+   npm install telegraf axios
+   ```
+4. **Hantar Fail:** (Guna Git atau FileZilla) hantar fail `bot.js` ke folder tersebut.
+5. **Hidupkan Bot:**
+   ```bash
+   pm2 start bot.js --name "bot-baru"
+   ```
+
+---
+
+## ⚡ LANGKAH 5: UPDATE GUNA BOT (MUDAH!)
+Selepas bot hidup di VPS, anda tidak perlu lagi buka Terminal untuk update kod.
+
+1. Edit kod di Laptop Boss.
+2. Buka Telegram bot baru Boss.
+3. **Hantar fail `bot.js`** terus ke chat bot tersebut.
+4. Bot akan automatik download, overwrite, dan restart sendiri.
+5. **SIAP!** Feature baru anda terus aktif.
+
+---
+
+### 💡 TIPS TAMBAHAN:
+- **PM2 Commands**:
+  - `pm2 list` (Tengok senarai bot aktif)
+  - `pm2 logs bot-baru` (Tengok ralat jika bot mati)
+  - `pm2 stop bot-baru` (Tutup bot)
+
+**SEKARANG ANDA DAH JADI MASTER BOT TELEGRAM!** 🚀💎🔥
