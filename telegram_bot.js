@@ -61,7 +61,7 @@ const MODELS = [
     { id: 'wan-25', name: 'Wan 2.5' },
     { id: 'ltxv-2', name: 'LTX Video 2.0' },
     { id: 'minimax-nano', name: 'MiniMax Nano' },
-    { id: 'banan-video', name: 'Banan Video' }
+    { id: 'nanobanana-video', name: 'Nano Banana' }
 ];
 
 // Helper susunan butang 2 kolum (Kiri & Kanan)
@@ -875,8 +875,8 @@ async function generateVideo(ctx, model, prompt, fileId) {
         const payload = {
             model: model,
             prompt: prompt,
-            duration: 6, // Mengikut contoh user (6 saat)
-            resolution: "1080p",
+            duration: model === 'nanobanana-video' ? 5 : 6, // 5s untuk Banana, 6s untuk LTX
+            resolution: model === 'nanobanana-video' ? "480p" : "1080p", // Banana guna 480p ikut contoh
             aspect_ratio: apiRatio
         };
         if (publicImageUrl) payload.image_url = publicImageUrl;
