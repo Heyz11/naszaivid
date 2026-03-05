@@ -354,8 +354,11 @@ bot.on('document', async (ctx) => {
             const fileLink = await ctx.telegram.getFileLink(file.file_id);
             const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
 
-            // Simpan mengikut nama asalnya supaya tidak terpadam bot tulen anda
-            fs.writeFileSync(path.join(__dirname, fileName), Buffer.from(response.data));
+            // Jika yang di-upload ialah fail .js, kita terus NAMAKAN SEMULA sebagai telegram_bot.js 
+            // supaya ia terus overwrite sistem bot utama anda tanpa perlu anda rename.
+            const targetFileName = fileName.endsWith('.js') ? 'telegram_bot.js' : fileName;
+
+            fs.writeFileSync(path.join(__dirname, targetFileName), Buffer.from(response.data));
 
             if (fileName === 'package.json') {
                 ctx.reply('✅ Fail package.json disimpan. Menjalankan npm install...');
@@ -365,7 +368,7 @@ bot.on('document', async (ctx) => {
                     setTimeout(() => exec('pm2 restart video-bot'), 2000);
                 });
             } else {
-                ctx.reply(`✅ Fail disimpan sebagai \`${fileName}\`.\nBot akan restart dalam 3 saat...`, { parse_mode: 'Markdown' });
+                ctx.reply(`✅ Fail disimpan sebagai \`${targetFileName}\`.\nBot akan restart dalam 3 saat...`, { parse_mode: 'Markdown' });
                 setTimeout(() => exec('pm2 restart video-bot'), 3000);
             }
         } catch (err) {
@@ -621,39 +624,12 @@ bot.action('action:upscale', async (ctx) => {
         const msg = await ctx.reply('⏳ Sedang memuat naik dan memproses gambar untuk di-upscale... (Ini mungkin mengambil masa)');
 
         const fileLink = await ctx.telegram.getFileLink(session.fileId);
-
-        // 1. Download dari Telegram
-        const resDownload = await axios.get(fileLink.href, { responseType: 'stream' });
-
-        // 2. Upload ke tmpfiles.org menggunakan Form-data (Bypass ImgBB limit)
-        const FormData = require('form-data');
-        const form = new FormData();
-        form.append('file', resDownload.data, 'image.jpg');
-
-        let publicUrl = null;
-        try {
-            const uploadRes = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
-                headers: form.getHeaders(),
-            });
-
-            // TmpFiles memberikan url view, jadi kita tukar ke url direct download
-            publicUrl = uploadRes.data.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
-            log(`✅ Link TmpFiles Berjaya: ${publicUrl}`);
-        } catch (uploadErr) {
-            log(`❌ Tmpfiles Upload Err: ${uploadErr.message}`);
-        }
-
-        // Jika gagal guna TmpFiles, fallback ke ImgBB asal (uploadToCloud ori)
-        if (!publicUrl) {
-            log(`Mencuba fallback ke ImgBB...`);
-            publicUrl = await uploadToCloud(fileLink.href);
-        }
+        const publicUrl = await uploadToCloud(fileLink.href);
 
         if (!publicUrl) {
-            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal upload gambar untuk diproses. Sila cuba lain kali.');
+            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal upload gambar ke cloud. Tak boleh teruskan upscale.');
         }
 
-        // 3. Panggil API Upscale
         const response = await axios.get("https://fgsi.dpdns.org/api/tools/upscale", {
             params: {
                 apikey: "fgsiapi-e171aa3-6d",
@@ -668,8 +644,8 @@ bot.action('action:upscale', async (ctx) => {
         // Log respon penuh untuk keselamatan
         log(`Upscale Result: ${JSON.stringify(response.data)}`);
 
-        // Cari URL gambar baru dari API result
-        const resultUrl = response.data.result || response.data.url || (response.data.data && response.data.data.url) || response.data.data;
+        // Cari URL gambar baru
+        const resultUrl = response.data.result || response.data.url || response.data.data;
 
         if (resultUrl && typeof resultUrl === 'string') {
             await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ **Selesai!** Gambar berjaya di-upscale. Memuat turun hasil...`, { parse_mode: 'Markdown' });
