@@ -796,7 +796,7 @@ bot.action('action:upscale_video', async (ctx) => {
 
         // Hantar ke FGSI
         const form = new FormData();
-        form.append('file', fs.createReadStream(tempPath), 'video.mp4');
+        form.append('file', fs.readFileSync(tempPath), 'video.mp4');
 
         const fgsiRes = await axios.post("https://fgsi.dpdns.org/api/tools/wink", form, {
             headers: {
