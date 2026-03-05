@@ -56,7 +56,7 @@ const bot = new Telegraf(BOT_TOKEN);
 
 // Tambah semula model-model stabil untuk ujian perbandingan
 const MODELS = [
-    { id: 'sora-2', name: 'Sora 2 (Premium)' },
+    { id: 'sora-2-vip', name: 'Sora 2 VIP' },
     { id: 'seedance-2', name: 'Seedance 2.0' },
     { id: 'kling-3', name: 'Kling 3' },
     { id: 'wan-25', name: 'Wan 2.5' },
@@ -872,10 +872,10 @@ async function generateVideo(ctx, model, prompt, fileId) {
         }
 
         let response;
-        if (model === 'sora-2') {
-            // --- LOGIK APIMART (SORA 2 REAL) ---
+        if (model === 'sora-2-vip') {
+            // --- LOGIK APIMART (SORA 2 VIP) ---
             const payload = {
-                model: "sora-2",
+                model: "sora-2-vip",
                 prompt: prompt,
                 duration: 15,
                 aspect_ratio: rawRatio === "16:9" ? "16:9" : (rawRatio === "9:16" ? "9:16" : "16:9")
