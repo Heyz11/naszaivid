@@ -134,6 +134,34 @@ async function uploadToCloud(telegramUrl) {
     }
 }
 
+
+/**
+ * Fungsi baru: Upload ke Telegra.ph (Lebih stabil untuk API Upscale)
+ * Tiada limit yang ketat & direct link (graph.org)
+ */
+async function uploadToTelegraph(fileUrl) {
+    try {
+        log('📤 Mengunggah gambar ke Telegra.ph...');
+        const resDl = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+        const form = new FormData();
+        form.append('file', Buffer.from(resDl.data), { filename: 'image.jpg' });
+
+        const res = await axios.post('https://graph.org/upload', form, {
+            headers: form.getHeaders()
+        });
+
+        if (res.data && res.data[0] && res.data[0].src) {
+            const link = 'https://graph.org' + res.data[0].src;
+            log(`✅ Link Telegra.ph: ${link}`);
+            return link;
+        }
+        return null;
+    } catch (err) {
+        log(`❌ Ralat Telegra.ph: ${err.message}`);
+        return null;
+    }
+}
+
 bot.start((ctx) => {
     const userId = ctx.from.id;
     const name = ctx.from.first_name;
@@ -615,49 +643,45 @@ bot.action('action:upscale', async (ctx) => {
     await ctx.answerCbQuery();
     const userId = ctx.from.id;
     const session = sessionData.get(userId);
-
-    if (!session || session.status !== 'ready_upscale' || !session.fileId) {
+    if (!session || !session.fileId) {
         return ctx.reply('Sesi tamat atau tidak sah. Sila hantar gambar semula.');
     }
 
     try {
-        const msg = await ctx.reply('⏳ Sedang memuat naik dan memproses gambar untuk di-upscale... (Ini mungkin mengambil masa)');
+        const msg = await ctx.reply('⏳ **Sedang memproses Upscale...**\nEnjin: Fgsi-HD (Laju & Stabil)');
 
+        // 1. Dapatkan Link & Upload ke Telegra.ph (Untuk elakkan ralat link)
         const fileLink = await ctx.telegram.getFileLink(session.fileId);
-        const publicUrl = await uploadToCloud(fileLink.href);
+        const publicUrl = await uploadToTelegraph(fileLink.href);
 
         if (!publicUrl) {
-            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal upload gambar ke cloud. Tak boleh teruskan upscale.');
+            return ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, '❌ Gagal akses gambar. Sila hantar semula.');
         }
 
+        // 2. Tanya API Fgsi
         const response = await axios.get("https://fgsi.dpdns.org/api/tools/upscale", {
             params: {
                 apikey: "fgsiapi-e171aa3-6d",
                 url: publicUrl,
             },
-            headers: {
-                accept: "application/json",
-            },
+            headers: { accept: "application/json" },
             timeout: 60000
         });
 
-        // Log respon penuh untuk keselamatan
-        log(`Upscale Result: ${JSON.stringify(response.data)}`);
-
-        // Cari URL gambar baru
         const resultUrl = response.data.result || response.data.url || response.data.data;
 
         if (resultUrl && typeof resultUrl === 'string') {
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ **Selesai!** Gambar berjaya di-upscale. Memuat turun hasil...`, { parse_mode: 'Markdown' });
-
-            // Hantar sebagai Document supaya Telegram tak compress kualiti gambar yang dah di-upscale
-            await ctx.replyWithDocument({ url: resultUrl, filename: 'upscaled_image.png' }, { caption: '✨ Hasil Upscale Berkualiti Tinggi' });
+            await ctx.deleteMessage().catch(() => { });
+            await ctx.replyWithPhoto({ url: resultUrl }, {
+                caption: '✅ **Upscale Selesai!**\nKualiti telah digandakan (4x HD).'
+            });
         } else {
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `❌ Gagal dapatkan URL gambar dari API.\nResponse: ${JSON.stringify(response.data)}`);
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `❌ API Upscale sibuk atau ralat.\nSila cuba sebentar lagi.`);
         }
+
     } catch (error) {
-        log(`Upscale Error: ${error.message} - ${JSON.stringify(error.response?.data || {})}`);
-        ctx.reply(`❌ Berlaku ralat semasa proses upscale.\nDetail: ${error.response?.data?.message || error.message}`);
+        log(`Upscale Error: ${error.message}`);
+        ctx.reply(`❌ Upscale gagal: ${error.message}`);
     } finally {
         sessionData.delete(userId);
     }
