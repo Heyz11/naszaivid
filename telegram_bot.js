@@ -810,17 +810,15 @@ bot.action('action:upscale_video', async (ctx) => {
         });
 
         const data = fgsiRes.data;
-        if (data && (data.status === true || data.url || data.data?.url)) {
-            const resultUrl = data.url || data.data?.url || data.result;
-            if (resultUrl) {
-                await ctx.replyWithVideo({ url: resultUrl }, {
-                    caption: `✅ **Upscale Video Selesai!**\n🎯 Enjin: FGSI (EnchantVideo)`
-                });
-            } else {
-                throw new Error("Gagal mendapatkan link video dari balasan API.");
-            }
+        const resultUrl = data?.url || data?.data?.url || data?.result || data?.video_url || data?.download_url;
+
+        if (resultUrl && typeof resultUrl === 'string' && resultUrl.startsWith('http')) {
+            await ctx.replyWithVideo({ url: resultUrl }, {
+                caption: `✅ **Upscale Video Selesai!**\n🎯 Enjin: FGSI (EnchantVideo)`
+            });
         } else {
-            throw new Error("API membalas dengan status ralat.");
+            // Tunjukkan balasan sebenar API dalam mesej error supaya mudah untuk baiki
+            throw new Error(`Data API:\n${JSON.stringify(data).substring(0, 150)}`);
         }
 
     } catch (error) {
