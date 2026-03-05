@@ -798,7 +798,7 @@ bot.action('action:upscale_video', async (ctx) => {
         const form = new FormData();
         form.append('file', fs.readFileSync(tempPath), 'video.mp4');
 
-        const fgsiRes = await axios.post("https://fgsi.dpdns.org/api/tools/wink", form, {
+        const fgsiRes = await axios.post("https://fgsi.dpdns.org/api/tools/enchantVideo", form, {
             headers: {
                 ...form.getHeaders(),
                 "Content-Type": "multipart/form-data",
@@ -814,7 +814,7 @@ bot.action('action:upscale_video', async (ctx) => {
             const resultUrl = data.url || data.data?.url || data.result;
             if (resultUrl) {
                 await ctx.replyWithVideo({ url: resultUrl }, {
-                    caption: `✅ **Upscale Video Selesai!**\n🎯 Enjin: FGSI (Wink)`
+                    caption: `✅ **Upscale Video Selesai!**\n🎯 Enjin: FGSI (EnchantVideo)`
                 });
             } else {
                 throw new Error("Gagal mendapatkan link video dari balasan API.");
