@@ -790,12 +790,9 @@ bot.action('action:upscale_video', async (ctx) => {
 
         const fileLink = await ctx.telegram.getFileLink(session.fileId);
         const writer = fs.createWriteStream(tempPath);
-        const responseDl = await axios({ url: fileLink.href, method: 'GET', responseType: 'stream' });
+        const responseDl = await axios({ url: fileLink.href, method: 'GET', responseType: 'stream', timeout: 120000 });
 
-        responseDl.data.pipe(writer);
-        await new Promise((resolve, reject) => {
-            writer.on('finish', resolve); writer.on('error', reject);
-        });
+        await pipeline(responseDl.data, writer);
 
         // Hantar ke FGSI
         const form = new FormData();
@@ -807,7 +804,9 @@ bot.action('action:upscale_video', async (ctx) => {
                 "Content-Type": "multipart/form-data",
                 "apikey": "fgsiapi-e171aa3-6d"
             },
-            timeout: 300000 // Limit 5 minit
+            timeout: 300000, // Limit 5 minit
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
         });
 
         const data = fgsiRes.data;
