@@ -893,12 +893,14 @@ async function generateVideo(ctx, model, prompt, fileId) {
                 timeout: 60000
             });
 
-            if (response.data && (response.data.id || response.data.data?.id)) {
-                const genId = response.data.id || response.data.data.id;
+            if (response.data && response.data.code === 200 && response.data.data && response.data.data.length > 0) {
+                const genId = response.data.data[0].task_id;
                 ctx.reply(`✅ Permintaan Sora 2 Diterima!\n\n🆔 *Gen ID:* \`${genId}\`\n⏳ Status: Memproses (APIMart)...\n\nSila tunggu video siap.`);
                 checkStatus(ctx, genId, 'apimart');
             } else {
-                throw new Error(response.data?.message || 'Gagal memulakan task di APIMart.');
+                let errMsg = 'Gagal memulakan task di APIMart.';
+                if (response.data && response.data.error) errMsg = response.data.error.message;
+                throw new Error(errMsg);
             }
 
         } else {
