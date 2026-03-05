@@ -877,8 +877,8 @@ async function generateVideo(ctx, model, prompt, fileId) {
             const payload = {
                 model: "sora-2",
                 prompt: prompt,
-                duration: 15, // Sora 2 APIMart guna 15s
-                aspect_ratio: rawRatio, // Gunakan format 16:9 / 9:16
+                duration: 15,
+                aspect_ratio: rawRatio === "16:9" ? "16:9" : (rawRatio === "9:16" ? "9:16" : "16:9"),
                 image_urls: publicImageUrl ? [publicImageUrl] : []
             };
 
