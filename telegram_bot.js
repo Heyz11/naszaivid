@@ -878,9 +878,11 @@ async function generateVideo(ctx, model, prompt, fileId) {
                 model: "sora-2",
                 prompt: prompt,
                 duration: 15,
-                aspect_ratio: rawRatio === "16:9" ? "16:9" : (rawRatio === "9:16" ? "9:16" : "16:9"),
-                image_urls: publicImageUrl ? [publicImageUrl] : []
+                aspect_ratio: rawRatio === "16:9" ? "16:9" : (rawRatio === "9:16" ? "9:16" : "16:9")
             };
+            if (publicImageUrl) {
+                payload.image_urls = [publicImageUrl];
+            }
 
             log(`Apimart Payload: ${JSON.stringify(payload)}`);
             response = await axios.post('https://api.apimart.ai/v1/videos/generations', payload, {
