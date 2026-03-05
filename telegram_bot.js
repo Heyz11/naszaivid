@@ -55,11 +55,27 @@ const bot = new Telegraf(BOT_TOKEN);
 
 // Tambah semula model-model stabil untuk ujian perbandingan
 const MODELS = [
-    { id: 'sora-2', name: 'Sora 2 (Premium - Mungkin Sibuk)' },
-    { id: 'seedance-2', name: 'Seedance 2.0 (Sangat Stabil)' },
-    { id: 'kling-3', name: 'Kling 3 (Stabil)' },
-    { id: 'wan-25', name: 'Wan 2.5 (Stabil)' }
+    { id: 'sora-2', name: 'Sora 2 (Premium)' },
+    { id: 'seedance-2', name: 'Seedance 2.0' },
+    { id: 'kling-3', name: 'Kling 3' },
+    { id: 'wan-25', name: 'Wan 2.5' },
+    { id: 'ltxv-2', name: 'LTX Video 2.0' },
+    { id: 'minimax-nano', name: 'MiniMax Nano' },
+    { id: 'banan-video', name: 'Banan Video' }
 ];
+
+// Helper susunan butang 2 kolum (Kiri & Kanan)
+function getModelButtons() {
+    const buttons = [];
+    for (let i = 0; i < MODELS.length; i += 2) {
+        const row = [Markup.button.callback(MODELS[i].name, `gen:${MODELS[i].id}`)];
+        if (i + 1 < MODELS.length) {
+            row.push(Markup.button.callback(MODELS[i + 1].name, `gen:${MODELS[i + 1].id}`));
+        }
+        buttons.push(row);
+    }
+    return buttons;
+}
 
 // Middleware untuk Semak Akses
 function hasAccess(userId) {
@@ -625,7 +641,7 @@ bot.action(/ratio:(.+)/, async (ctx) => {
     if (session.mode === 'text') {
         session.status = 'waiting_for_model';
         sessionData.set(userId, session);
-        const buttons = MODELS.map(m => [Markup.button.callback(m.name, `gen:${m.id}`)]);
+        const buttons = getModelButtons();
         ctx.reply(`Nisbah: **${ratio}** ✅\nPrompt: *"${session.prompt}"*\n\nSila pilih model AI:`, {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard(buttons)
@@ -652,7 +668,7 @@ bot.on('photo', async (ctx) => {
 
         log(`Gambar diterima dari ${ctx.from.username || ctx.from.first_name}.`);
 
-        const buttons = MODELS.map(m => [Markup.button.callback(m.name, `gen:${m.id}`)]);
+        const buttons = getModelButtons();
         await ctx.reply(`Gambar & Prompt Sedia! ✅\n\nSila pilih model AI untuk mulakan video:`, {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard(buttons)
@@ -852,12 +868,16 @@ async function generateVideo(ctx, model, prompt, fileId) {
             await ctx.reply(`🚀 Menyiapkan penjanaan Text-to-Video...\nModel: *${modelName}*`, { parse_mode: 'Markdown' });
         }
 
+        // Map ratio ke format API (16:9 -> horizontal, 9:16 -> vertical)
+        const rawRatio = sessionData.get(ctx.from.id)?.ratio || "16:9";
+        const apiRatio = rawRatio === "16:9" ? "horizontal" : (rawRatio === "9:16" ? "vertical" : "square");
+
         const payload = {
             model: model,
             prompt: prompt,
-            duration: 15,
+            duration: 6, // Mengikut contoh user (6 saat)
             resolution: "1080p",
-            aspect_ratio: sessionData.get(ctx.from.id)?.ratio || "16:9"
+            aspect_ratio: apiRatio
         };
         if (publicImageUrl) payload.image_url = publicImageUrl;
 
